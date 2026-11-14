@@ -8,7 +8,7 @@ the scene, like a Google Nest Hub.
 If you miss the weather frog since Google removed its animations, this card is a good replacement:
 put it on a wall tablet, an old smart display or any Home Assistant dashboard and the frog is back.
 
-![The card filling a landscape screen, with the clock, the forecast and a status line](docs/landscape.jpg)
+![The card filling a landscape screen, with the clock and the forecast](docs/landscape.jpg)
 
 <img src="docs/portrait.jpg" alt="The card on a portrait screen" width="360">
 
@@ -25,7 +25,7 @@ put it on a wall tablet, an old smart display or any Home Assistant dashboard an
   weather entity and the sun.
 - The frog plays its animation, rests for a few seconds and plays again, as on the original.
 - Optional Nest Hub style overlay: date, large clock, now and the next days with colour weather
-  icons, and a status line from any sensor.
+  icons. It can also show an optional status line from any sensor; it is off unless you set one.
 - Everything is served by Home Assistant itself; the card makes no requests to other sites.
 - Works on wall tablets and smart displays without WebGL: the frog is then drawn in software, and
   where even that is impossible the card shows a still of the frog.
@@ -76,7 +76,7 @@ entity: weather.home
 | `forecast_days` | `2` | Nest overlay: how many days after today to show. |
 | `time_format` | from your profile | Nest overlay: `24` or `12` (12-hour times are shown without AM or PM, like the Nest Hub). |
 | `icons` | `meteocons` | Nest overlay: `meteocons` (colour) or `mdi` (white Material Design icons). |
-| `status_entity` | none | Nest overlay: a sensor whose text is shown on one line under the clock. |
+| `status_entity` | none (off) | Nest overlay: optional status line; a sensor whose text is shown on one line under the clock. |
 | `status_ok_prefix` | `All good` | Status text starting with this shows a green check; anything else an orange alert. |
 | `aspect_ratio` | `1` | Width divided by height of the card. |
 | `full_height` | `false` | Fill the window below the card's top edge, for a panel view or a kiosk screen. |
@@ -103,7 +103,18 @@ views:
         overlay: nest
         full_height: true
         border_radius: 0
-        status_entity: sensor.house_status
+```
+
+An optional status line under the clock, for example a template sensor that reads "All good" or
+lists what needs attention (green check when the text starts with `status_ok_prefix`, orange
+alert otherwise):
+
+```yaml
+type: custom:froggy-weather-card
+entity: weather.home
+overlay: nest
+status_entity: sensor.house_status
+status_ok_prefix: All good
 ```
 
 A strip across the top of a dashboard:
