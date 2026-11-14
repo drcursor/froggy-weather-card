@@ -35,6 +35,11 @@ put it on a wall tablet, an old smart display or any Home Assistant dashboard an
 
 ### HACS
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=drcursor&repository=froggy-weather-card&category=plugin)
+
+The button opens this repository in HACS (the Marketplace) on your own Home Assistant; choose
+**Download** and reload the browser. Or add it by hand:
+
 1. In Home Assistant, open **HACS** (the **Marketplace** under Settings on Home Assistant 2026.11
    and later).
 2. Add this repository as a custom repository, type **Dashboard**:
