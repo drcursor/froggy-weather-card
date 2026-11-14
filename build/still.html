@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0;background:transparent">
+<canvas id="c" width="1280" height="1280"></canvas>
+<script src="../dist/canvaskit.js"></script><script src="../dist/Flare.min.js"></script>
+<script>
+window.done=null; const n=location.hash.slice(1), g=new Flare.Graphics(document.getElementById('c'));
+g.initialize(()=>{new Flare.ActorLoader().load(`../dist/${n}_frog.flr`,a=>{
+ a.initialize(g);const ab=a.makeInstance();ab.initialize(g);
+ const an=ab._Animations.find(x=>x._Name==='Hero-Action')||ab._Animations[0];
+ const ai=new Flare.AnimationInstance(an._Actor,an); ai.loop=false;
+ // The pose Froggy holds between plays: the end of Hero-Action.
+ for(let t=0;t<=an._Duration+0.05;t+=1/30){ai.time=t;ai.apply(ab,1);ab.advance(1/30);}
+ const W=1280,w=ab.width,h=ab.height,x0=-ab.origin[0]*w,y0=-ab.origin[1]*h,s=Math.max(W/w,W/h);
+ g.clear([0,0,0,0]);g.setView([s,0,0,s,W/2-(x0+w/2)*s,W/2-(y0+h/2)*s]);ab.draw(g);g.flush();
+ window.done=an._Duration;});},'../dist/');
+</script>

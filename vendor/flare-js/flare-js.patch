@@ -1,0 +1,220 @@
+diff -ru a/source/ActorArtboard.js b/source/ActorArtboard.js
+--- a/source/ActorArtboard.js	1985-10-26 09:15:00
++++ b/source/ActorArtboard.js	2026-11-14 17:37:16
+@@ -281,7 +281,10 @@
+ 		const components = this._Components;
+ 		for(const component of components)
+ 		{
+-			component.dispose(this, graphics);
++			if(component)
++			{
++				component.dispose(this, graphics);
++			}
+ 		}
+ 		if(this._ClippingPath)
+ 		{
+@@ -460,7 +463,10 @@
+ 		const components = this._Components;
+ 		for(const component of components)
+ 		{
+-			component.initialize(this, graphics);
++			if(component)
++			{
++				component.initialize(this, graphics);
++			}
+ 		}
+ 
+ 		if(this._ClipContents)
+diff -ru a/source/ActorLoader.js b/source/ActorLoader.js
+--- a/source/ActorLoader.js	1985-10-26 09:15:00
++++ b/source/ActorLoader.js	2026-11-14 17:37:16
+@@ -41,7 +41,7 @@
+ import ActorArtboard from "./ActorArtboard.js";
+ import { ColorFill, ColorStroke, GradientFill, GradientStroke, RadialGradientFill, RadialGradientStroke } from "./ColorComponent.js";
+ import { StraightPathPoint, CubicPathPoint, PointType } from "./PathPoint.js";
+-import { KeyFrame, PathsKeyFrame } from "./KeyFrame.js";
++import { KeyFrame } from "./KeyFrame.js";
+ import { mat2d, vec2 } from "gl-matrix";
+ import { Hold, Linear, Cubic } from "./Interpolation.js";
+ import TrimPath from "./TrimPath.js";
+@@ -142,15 +142,29 @@
+ 				component = _ReadActorEvent(block.reader, new ActorEvent());
+ 				break;
+ 			case _BlockTypes.ActorNode:
+-			case _BlockTypes.ActorCacheNode:
+ 				component = _ReadActorNode(version, block.reader, new ActorNode());
+ 				break;
+-			case _BlockTypes.ActorTargetNode:
+-				component = _ReadActorNode(version, block.reader, new ActorTargetNode());
++			// Layer effects are read so the file parses, but not drawn: the renderer becomes a
++			// plain node, so its children draw normally, and the effects themselves are skipped.
++			case _BlockTypes.ActorLayerEffectRenderer:
++				component = _ReadDrawable(version, block.reader, new ActorNode());
+ 				break;
+-			case _BlockTypes.ActorLayerNode:
+-				component = _ReadDrawable(version, block.reader, new ActorLayerNode());
++			case _BlockTypes.ActorMask:
++				_ReadLayerEffect(block.reader);
++				block.reader.readId("source");
++				block.reader.readUint8("maskType");
+ 				break;
++			case _BlockTypes.ActorBlur:
++				_ReadBlur(block.reader);
++				break;
++			case _BlockTypes.ActorDropShadow:
++			case _BlockTypes.ActorInnerShadow:
++				_ReadBlur(block.reader);
++				block.reader.readFloat32("offsetX");
++				block.reader.readFloat32("offsetY");
++				block.reader.readFloat32Array(new Float32Array(4), "color");
++				block.reader.readUint8("blendMode");
++				break;
+ 			case _BlockTypes.ActorBone:
+ 				component = _ReadActorBone(version, block.reader, new ActorBone());
+ 				break;
+@@ -1250,6 +1264,20 @@
+ 	return component;
+ }
+ 
++function _ReadLayerEffect(reader)
++{
++	reader.readString("name");
++	reader.readId("parent");
++	reader.readBool("isActive");
++}
++
++function _ReadBlur(reader)
++{
++	_ReadLayerEffect(reader);
++	reader.readFloat32("blurX");
++	reader.readFloat32("blurY");
++}
++
+ function _ReadDrawable(version, reader, component)
+ {
+ 	_ReadActorNode(version, reader, component);
+@@ -1377,6 +1405,12 @@
+ 		component._VertexStride = vertexStride;
+ 		component._Vertices = new Float32Array(numVertices * vertexStride);
+ 		reader.readFloat32Array(component._Vertices, "vertices");
++
++		// Format 24 packs the original UVs of images marked for runtime swapping.
++		if (version >= 24 && reader.readBool("isDynamic"))
++		{
++			reader.readFloat32Array(new Float32Array(numVertices * 2), "uv");
++		}
+ 
+ 		const numTris = reader.readUint32("numTriangles");
+ 		component._Triangles = new Uint16Array(numTris * 3);
+diff -ru a/source/Block.js b/source/Block.js
+--- a/source/Block.js	1985-10-26 09:15:00
++++ b/source/Block.js	2026-11-14 17:36:36
+@@ -44,9 +44,13 @@
+ 	ActorSkin: block(113, "skin"),
+ 	ActorArtboard: block(114, "artboard"),
+ 	Artboards: block(115, "artboards"),
+-	ActorCacheNode: block(116, "cacheNode"),
+-	ActorTargetNode: block(117, "targetNode"),
+-	ActorLayerNode: block(118, "layerNode"),
++	// Flare format 24 numbers these as flare_flutter does: layer effects, not cache, target
++	// and layer nodes.
++	ActorLayerEffectRenderer: block(116, "layerEffectRenderer"),
++	ActorMask: block(117, "mask"),
++	ActorBlur: block(118, "blur"),
++	ActorDropShadow: block(119, "dropShadow"),
++	ActorInnerShadow: block(120, "innerShadow"),
+ 	FlareNode: block(24, "flareNode"),
+ 	EmbeddedAssets: block(25, "embeddedAssets"),
+ 	FlareAsset: block(26, "flareAsset")
+diff -ru a/source/Graphics.js b/source/Graphics.js
+--- a/source/Graphics.js	1985-10-26 09:15:00
++++ b/source/Graphics.js	2026-11-14 18:02:18
+@@ -4,10 +4,6 @@
+ import StrokeJoin from "./StrokeJoin.js";
+ import BlendMode from "./BlendMode.js";
+ import { PointType } from "./PathPoint.js";
+-/// #if CanvasKitLocation == "embedded"
+-import CanvasKitInit from '../canvaskit/canvaskit.js';
+-import CanvasKitModule from '../canvaskit/canvaskit.wasm';
+-/// #endif
+ let CanvasKit = null;
+ let loadQueue = null;
+ export default class Graphics
+@@ -51,11 +47,7 @@
+ 			loadQueue = [{graphics:this, cb}];
+ 			CanvasKitInit(
+ 				{
+-				/// #if CanvasKitLocation == "embedded"
+-					wasmBinary: CanvasKitModule,
+-				/// #else
+-					locateFile: (file) => staticPath + file,
+-				/// #endif 
++									locateFile: (file) => staticPath + file, 
+ 				}).ready().then((CK) => 
+ 				{
+ 					// when debugging, it can be handy to not run directly in the then, because if there
+@@ -84,8 +76,19 @@
+ 
+ 	init()
+ 	{
+-		this._GLContext = CanvasKit.GetWebGLContext(this._Canvas);
+-		this._SkContext = CanvasKit.MakeGrContext(this._GLContext);
++		// Without WebGL, draw in software into the canvas's 2D context.
++		let gl = 0;
++		try
++		{
++			gl = CanvasKit.GetWebGLContext(this._Canvas);
++		}
++		catch (err)
++		{
++			gl = 0;
++		}
++		this._Software = !gl;
++		this._GLContext = gl;
++		this._SkContext = gl ? CanvasKit.MakeGrContext(gl) : null;
+ 		this.updateBackendSurface();
+ 
+ 		const clearPaint = new CanvasKit.SkPaint();
+@@ -105,9 +108,15 @@
+ 		{
+ 			this._SkSurface.delete();
+ 		}
+-		CanvasKit.setCurrentContext(this._GLContext);
+-
+-		this._SkSurface = CanvasKit.MakeOnScreenGLSurface(this._SkContext, this.width, this.height);
++		if (this._Software)
++		{
++			this._SkSurface = CanvasKit.MakeSWCanvasSurface(this._Canvas);
++		}
++		else
++		{
++			CanvasKit.setCurrentContext(this._GLContext);
++			this._SkSurface = CanvasKit.MakeOnScreenGLSurface(this._SkContext, this.width, this.height);
++		}
+ 		this._SkCanvas = this._SkSurface.getCanvas();
+ 	}
+ 
+@@ -147,6 +156,11 @@
+ 		}
+ 	}
+ 
++	get isSoftware()
++	{
++		return this._Software;
++	}
++
+ 	get width()
+ 	{
+ 		return this._Canvas.width;
+@@ -160,7 +174,10 @@
+ 	clear(color)
+ 	{
+ 		const { _GLContext: ctx, _ClearPaint: clearPaint, _SkCanvas: skCanvas, width, height } = this;
+-		CanvasKit.setCurrentContext(ctx);
++		if (!this._Software)
++		{
++			CanvasKit.setCurrentContext(ctx);
++		}
+ 		if (color)
+ 		{
+ 			clearPaint.setColor(CanvasKit.Color(Math.round(color[0] * 255), Math.round(color[1] * 255), Math.round(color[2] * 255), color[3]));

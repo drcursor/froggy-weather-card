@@ -1,0 +1,28 @@
+name: Release assets
+
+# HACS installs a card from the files attached to its latest release, so attach every file in
+# dist/ (the card, its runtime and its artwork) to each published release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the card version matches the tag
+        run: |
+          version="$(sed -n 's/^const CARD_VERSION = "\(.*\)";$/\1/p' dist/froggy-weather-card.js)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "CARD_VERSION is $version but the release tag is $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - name: Attach dist/ to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
