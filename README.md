@@ -90,6 +90,7 @@ entity: weather.home
 | `video` | `auto` | Pre-rendered scene videos. `auto`: only where WebGL is missing or the live drawing fails. `always`: videos first on every device. `never`: always draw live. |
 | `software_max_side` | `800` | Live drawing without WebGL: largest canvas side in pixels. Lower is smoother on slow devices. |
 | `software_fps` | `30` | Live drawing without WebGL: frame rate cap. |
+| `debug` | `false` | Shows measured stats top right, once a second: card version, CPU cores, pixel ratio, page frame rate, then the video (cut, size, frame rate, dropped frames) or the live drawing (WebGL or software, size, frame rate, draw time), and VP9, H.264 and WebGL support. For checking smoothness on a device. |
 
 The clock and the forecast days always use Home Assistant's time zone, so a display whose browser
 runs on UTC still shows the right time.

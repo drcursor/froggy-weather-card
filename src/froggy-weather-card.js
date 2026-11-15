@@ -31,8 +31,9 @@
 //                             or fails; always plays them first; never draws live only; default auto)
 // software_max_side: 800     (without WebGL: canvas size cap in px; lower is smoother)
 // software_fps: 30           (without WebGL: frame rate cap)
+// debug: false               (frame rates, dropped frames and codec support, top right)
 
-const CARD_VERSION = "1.1.2";
+const CARD_VERSION = "1.1.3";
 const BASE = new URL(".", import.meta.url).href;
 // The card's own ?v=, passed on so a new version also reloads the runtime scripts.
 const VERSION = new URL(import.meta.url).search;
@@ -164,6 +165,7 @@ class FroggyCard extends HTMLElement {
       software_max_side: SOFTWARE_MAX_SIDE,
       software_fps: SOFTWARE_FPS,
       video: "auto",
+      debug: false,
       ...config,
     };
     // true and false as in the first 1.1.0 build.
@@ -321,6 +323,10 @@ class FroggyCard extends HTMLElement {
         video.live { visibility: visible; }
         .note { position: absolute; top: 8px; left: 8px; right: 8px; color: rgba(255,255,255,0.75);
                 font: 12px var(--ha-font-family-body, sans-serif); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        .debug { position: absolute; top: 8px; right: 8px; padding: 4px 6px; white-space: pre; color: #7f7;
+                 background: rgba(0,0,0,0.6); font: 13px/1.3 monospace; z-index: 2;
+                 max-width: calc(100% - 28px); overflow: hidden; }
+        .debug[hidden] { display: none; }
         .weather { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 20px 16px;
                    color: #fff; background: linear-gradient(to top, rgba(0,0,0,0.55), transparent);
                    text-shadow: 0 1px 3px rgba(0,0,0,0.6); font-family: var(--ha-font-family-body, sans-serif); }
@@ -351,7 +357,7 @@ class FroggyCard extends HTMLElement {
         .slot img { width: min(10cqh, 7.6cqw); height: min(10cqh, 7.6cqw); margin: max(-2cqh, -1.5cqw) 0;
                     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4)); }
       </style>
-      <ha-card><div class="box"><canvas></canvas><video muted playsinline disablepictureinpicture preload="auto"></video><div class="note" hidden></div>
+      <ha-card><div class="box"><canvas></canvas><video muted playsinline disablepictureinpicture preload="auto"></video><div class="note" hidden></div><div class="debug" hidden></div>
         <div class="weather"><div class="temp"></div><div class="cond"></div></div>
         <div class="nest" hidden>
           <div class="nest-row"><div class="clock"><div class="date"></div><div class="time"></div></div>
@@ -399,6 +405,7 @@ class FroggyCard extends HTMLElement {
     this._tick = setInterval(() => this._update(), 60 * 1000);
     this._clock = setInterval(() => this._renderClock(), 5000);
     this._subscribe();
+    if (this._config.debug) this._startDebug();
     if (this._config.video === "always" || (this._config.video === "auto" && !hasWebGL())) this._startVideo();
     else this._start();
   }
@@ -415,6 +422,55 @@ class FroggyCard extends HTMLElement {
     cancelAnimationFrame(this._frame);
     this._frame = null;
     this._video.pause();
+    clearInterval(this._debugTimer);
+    this._debugTimer = null;
+  }
+
+  // Option debug: measured frame rates, top right.
+  _startDebug() {
+    const box = this._root.querySelector(".debug");
+    box.hidden = false;
+    const probe = document.createElement("video");
+    const codecs = `webm ${probe.canPlayType('video/webm; codecs="vp9"') || "no"}, ` +
+      `mp4 ${probe.canPlayType('video/mp4; codecs="avc1.4D401F"') || "no"}, ${hasWebGL() ? "webgl" : "no webgl"}`;
+    let raf = 0;
+    const count = () => {
+      raf++;
+      if (this._debugTimer) requestAnimationFrame(count);
+    };
+    let last = performance.now();
+    let drawn = 0;
+    let shown = 0;
+    let dropped = 0;
+    this._debugTimer = setInterval(() => {
+      const now = performance.now();
+      const secs = (now - last) / 1000;
+      last = now;
+      const lines = [`${CARD_VERSION} cores ${navigator.hardwareConcurrency || "?"} dpr ${window.devicePixelRatio}`,
+        `page ${Math.round(raf / secs)} fps`];
+      raf = 0;
+      if (this._videoMode) {
+        const v = this._video;
+        const q = v.getVideoPlaybackQuality?.();
+        const total = q ? q.totalVideoFrames : 0;
+        const drop = q ? q.droppedVideoFrames : 0;
+        const playing = !v.paused && !v.ended;
+        lines.push(`video ${this._cut()} ${v.videoWidth}x${v.videoHeight} ${playing ? "playing" : "held"}`,
+          `${playing ? Math.round((total - shown) / secs) : "-"} fps, dropped ${drop - dropped}`);
+        shown = total;
+        dropped = drop;
+      } else if (this._graphics) {
+        const ms = this._frames ? (this._drawTime / this._frames).toFixed(1) : "-";
+        lines.push(`anim ${this._graphics.isSoftware ? "software" : "webgl"} ${this._graphics.viewportWidth}x${this._graphics.viewportHeight}`,
+          `${this._playing ? Math.round((this._frames - drawn) / secs) : "-"} fps, draw ${ms} ms`);
+        drawn = this._frames || 0;
+      } else {
+        lines.push(this._failReason ? `still: ${this._failReason}` : "loading");
+      }
+      lines.push(codecs);
+      box.textContent = lines.join("\n");
+    }, 1000);
+    requestAnimationFrame(count);
   }
 
   async _start() {
@@ -700,10 +756,15 @@ class FroggyCard extends HTMLElement {
     const s = Math.max(W / w, H / h);
     const tx = (W - w * s) / 2 - x0 * s;
     const ty = (H - h * s) * this._focus() - y0 * s;
+    const t0 = this._config.debug ? performance.now() : 0;
     g.clear([0, 0, 0, 0]);
     g.setView([s, 0, 0, s, tx, ty]);
     ab.draw(g);
     g.flush();
+    if (this._config.debug) {
+      this._frames = (this._frames || 0) + 1;
+      this._drawTime = (this._drawTime || 0) + performance.now() - t0;
+    }
   }
 
   static getStubConfig(hass) {
@@ -751,6 +812,7 @@ class FroggyCard extends HTMLElement {
             { name: "video", selector: select(["auto", "always", "never"]) },
             { name: "software_max_side", selector: { number: { min: 320, max: 1600, step: 40, mode: "box" } } },
             { name: "software_fps", selector: { number: { min: 10, max: 60, mode: "box" } } },
+            { name: "debug", selector: { boolean: {} } },
           ],
         },
       ],
@@ -773,6 +835,7 @@ class FroggyCard extends HTMLElement {
           video: "Pre-rendered videos (auto: where WebGL is missing)",
           software_max_side: "Without WebGL: largest canvas side (px)",
           software_fps: "Without WebGL: frame rate cap",
+          debug: "Show frame rate stats",
         })[field.name],
     };
   }
