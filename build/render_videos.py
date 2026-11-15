@@ -4,10 +4,11 @@ from the artwork in dist/ (run build/build.sh first). Needs Playwright with Chro
     uv run --with playwright python3 build/render_videos.py [name prefix, e.g. hill_]
 
 Each scene is drawn at 1920x1920 and 30 fps, then cut three ways, each covering what a card of
-that shape shows of the square scene (the card picks one by its own shape):
-  _portrait.webm   1200x1920, the middle of the width (a 1200x1920 portrait screen and narrower)
-  _landscape.webm  1920x1200, the middle of the height (16:10 and wider)
-  _square.webm     1080x1080, the whole scene (anything in between)
+that shape shows of the square scene (the card picks one by its own shape), and scaled to about
+0.7 megapixels so slow devices can decode it in software:
+  _portrait.webm   676x1080, the middle of the width (a 1200x1920 portrait screen and narrower)
+  _landscape.webm  1080x676, the middle of the height (16:10 and wider)
+  _square.webm     860x860, the whole scene (anything in between)
 """
 import functools
 import http.server
@@ -22,9 +23,9 @@ from playwright.sync_api import sync_playwright
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "vendor" / "videos"
 CUTS = {
-    "portrait": "crop=1200:1920:360:0",
-    "landscape": "crop=1920:1200:0:360",
-    "square": "scale=1080:1080",
+    "portrait": "crop=1200:1920:360:0,scale=676:1080:flags=lanczos",
+    "landscape": "crop=1920:1200:0:360,scale=1080:676:flags=lanczos",
+    "square": "scale=860:860:flags=lanczos",
 }
 
 
@@ -45,7 +46,7 @@ def encode(frames, bg, cut, out):
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-loop", "1", "-framerate", "30", "-i", str(bg),
          "-framerate", "30", "-i", f"{frames}/f%04d.png", "-filter_complex", graph, "-map", "[v]", "-an",
-         "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "40", "-row-mt", "1", "-deadline", "good",
+         "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "34", "-row-mt", "1", "-deadline", "good",
          "-cpu-used", "3", "-g", "90", str(out)],
         check=True,
     )

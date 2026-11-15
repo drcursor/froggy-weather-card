@@ -50,7 +50,7 @@ The button opens this repository in HACS (the Marketplace) on your own Home Assi
 3. Find **Froggy Weather Card** and download it.
 4. Reload the browser.
 
-HACS registers the dashboard resource for you. The download is about 85 MB, mostly the scene
+HACS registers the dashboard resource for you. The download is about 75 MB, mostly the scene
 videos (60 scenes, each cut three ways).
 
 ### Manual
@@ -138,7 +138,7 @@ border_radius: 0
 [LANovo](https://github.com/ygelfand/LANovo) replaces Google Assistant on Lenovo Smart Displays (and
 the JBL Link View and Lenovo ThinkSmart View) and can show a Home Assistant dashboard, which gives
 these displays their frog back. Its built-in browser has no WebGL, so the card plays its scene
-videos there (the 1200x1920 portrait cut fits the Lenovo Smart Display 10 exactly), and it shows
+videos there (the portrait cut matches the shape of the Lenovo Smart Display 10), and it shows
 Home Assistant's time even though that browser runs on UTC.
 
 1. Make a dashboard with the card, for example the full-screen panel above, or a kitchen layout
@@ -206,11 +206,13 @@ Each video is the background with the frog's animation, rendered from the origin
 
 | Cut | Size | Used when the card's width divided by its height is |
 |---|---|---|
-| `_portrait` | 1200x1920 | 0.63 or less (a portrait screen) |
-| `_landscape` | 1920x1200 | 1.59 or more (a landscape screen, a wide strip) |
-| `_square` | 1080x1080 | in between |
+| `_portrait` | 676x1080 | 0.63 or less (a portrait screen) |
+| `_landscape` | 1080x676 | 1.59 or more (a landscape screen, a wide strip) |
+| `_square` | 860x860 | in between |
 
-Each cut covers everything a card of that shape shows, so nothing is lost to cropping. The video
+Each cut covers everything a card of that shape shows, so nothing is lost to cropping. The cuts
+are about 0.7 megapixels, which a slow smart display decodes in software at 30 frames per second;
+on a Lenovo Smart Display a 1920 px video already stuttered. The video
 plays once, holds its last frame, and plays again after a few seconds, as the original does.
 
 The frog animations are [Flare](https://github.com/2d-inc/Flare-JS) files. The card plays them

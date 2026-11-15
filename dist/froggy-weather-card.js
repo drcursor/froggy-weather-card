@@ -32,7 +32,7 @@
 // software_max_side: 800     (without WebGL: canvas size cap in px; lower is smoother)
 // software_fps: 30           (without WebGL: frame rate cap)
 
-const CARD_VERSION = "1.1.1";
+const CARD_VERSION = "1.1.2";
 const BASE = new URL(".", import.meta.url).href;
 // The card's own ?v=, passed on so a new version also reloads the runtime scripts.
 const VERSION = new URL(import.meta.url).search;
@@ -40,8 +40,9 @@ const SCENES = ["fields", "hill", "mushroom"];
 const ANIMATION = "Hero-Action";
 
 // The video cuts and the card shapes they cover without losing any of the square scene:
-// portrait 1200x1920 (width / height 0.625 and narrower), landscape 1920x1200 (1.6 and wider),
-// and the whole scene, 1080x1080, in between.
+// portrait 676x1080 (width / height 0.625 and narrower), landscape 1080x676 (1.6 and wider),
+// and the whole scene, 860x860, in between. About 0.7 megapixels each, which a slow smart
+// display decodes in software at 30 fps; a 1920 px cut is too much for one.
 const VIDEO_PORTRAIT = 0.63;
 const VIDEO_LANDSCAPE = 1.59;
 
