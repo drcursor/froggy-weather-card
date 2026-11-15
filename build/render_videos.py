@@ -45,7 +45,7 @@ def encode(frames, bg, cut, out):
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-loop", "1", "-framerate", "30", "-i", str(bg),
          "-framerate", "30", "-i", f"{frames}/f%04d.png", "-filter_complex", graph, "-map", "[v]", "-an",
-         "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "34", "-row-mt", "1", "-deadline", "good",
+         "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "40", "-row-mt", "1", "-deadline", "good",
          "-cpu-used", "3", "-g", "90", str(out)],
         check=True,
     )

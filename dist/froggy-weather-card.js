@@ -32,7 +32,7 @@
 // software_max_side: 800     (without WebGL: canvas size cap in px; lower is smoother)
 // software_fps: 30           (without WebGL: frame rate cap)
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 const BASE = new URL(".", import.meta.url).href;
 // The card's own ?v=, passed on so a new version also reloads the runtime scripts.
 const VERSION = new URL(import.meta.url).search;

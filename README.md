@@ -50,7 +50,7 @@ The button opens this repository in HACS (the Marketplace) on your own Home Assi
 3. Find **Froggy Weather Card** and download it.
 4. Reload the browser.
 
-HACS registers the dashboard resource for you. The download is about 120 MB, mostly the scene
+HACS registers the dashboard resource for you. The download is about 85 MB, mostly the scene
 videos (60 scenes, each cut three ways).
 
 ### Manual
