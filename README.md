@@ -24,14 +24,14 @@ put it on a wall tablet, an old smart display or any Home Assistant dashboard an
   sunset, night) and five kinds of weather (sunny, cloudy, hazy, rainy, snowy), chosen from your
   weather entity and the sun.
 - The frog plays its animation, rests for a few seconds and plays again, as on the original.
-- Smooth on slow hardware: each scene plays as a pre-rendered video at 30 frames per second, cut
-  portrait, landscape or square to match the card's shape, so even an old smart display plays it
-  without stutter.
+- Smooth on slow hardware: where the browser has no WebGL, as on many smart displays, each scene
+  plays as a pre-rendered video at 30 frames per second instead, cut portrait, landscape or square
+  to match the card's shape.
 - Optional Nest Hub style overlay: date, large clock, now and the next days with colour weather
   icons. It can also show an optional status line from any sensor; it is off unless you set one.
 - Everything is served by Home Assistant itself; the card makes no requests to other sites.
-- Where video cannot play, the frog is drawn live (in software on devices without WebGL), and
-  where even that is impossible the card shows a still of the frog.
+- Where video cannot play either, the frog is drawn in software, and where even that is impossible
+  the card shows a still of the frog.
 - Visual editor in the dashboard.
 
 ## Installation
@@ -87,7 +87,7 @@ entity: weather.home
 | `height` | none | Any CSS height, such as `30vh`. Overrides `aspect_ratio` and `full_height`. |
 | `focus_y` | `0.5` | When the square scene is cropped, which height stays in view, from `0` (top) to `1` (bottom). |
 | `border_radius` | theme | Corner radius in pixels. |
-| `video` | `true` | Play the pre-rendered scene videos. `false` draws the frog live instead. |
+| `video` | `auto` | Pre-rendered scene videos. `auto`: only where WebGL is missing or the live drawing fails. `always`: videos first on every device. `never`: always draw live. |
 | `software_max_side` | `800` | Live drawing without WebGL: largest canvas side in pixels. Lower is smoother on slow devices. |
 | `software_fps` | `30` | Live drawing without WebGL: frame rate cap. |
 
@@ -137,9 +137,9 @@ border_radius: 0
 
 [LANovo](https://github.com/ygelfand/LANovo) replaces Google Assistant on Lenovo Smart Displays (and
 the JBL Link View and Lenovo ThinkSmart View) and can show a Home Assistant dashboard, which gives
-these displays their frog back. The card plays its scene videos there (the 1200x1920 portrait cut
-fits the Lenovo Smart Display 10 exactly), and it shows Home Assistant's time even though that
-browser runs on UTC.
+these displays their frog back. Its built-in browser has no WebGL, so the card plays its scene
+videos there (the 1200x1920 portrait cut fits the Lenovo Smart Display 10 exactly), and it shows
+Home Assistant's time even though that browser runs on UTC.
 
 1. Make a dashboard with the card, for example the full-screen panel above, or a kitchen layout
    with the frog across the top:
@@ -192,8 +192,17 @@ Tips:
 
 ## How it works
 
-Each scene is a video: the background with the frog's animation, rendered from the original
-animation at 1920x1920 and 30 frames per second, and cut three ways (VP9 WebM):
+The card tries these in order and uses the first that works:
+
+1. The animation drawn live with WebGL (sharp at any size, the original animation).
+2. A pre-rendered video of the scene, where WebGL is missing or the live drawing does not start.
+3. The animation drawn live in software, where the video cannot play.
+4. A still of the frog over the background.
+
+`video: always` moves the video to the front; `video: never` leaves it out.
+
+Each video is the background with the frog's animation, rendered from the original animation at
+1920x1920 and 30 frames per second, and cut three ways (VP9 WebM):
 
 | Cut | Size | Used when the card's width divided by its height is |
 |---|---|---|
@@ -204,7 +213,6 @@ animation at 1920x1920 and 30 frames per second, and cut three ways (VP9 WebM):
 Each cut covers everything a card of that shape shows, so nothing is lost to cropping. The video
 plays once, holds its last frame, and plays again after a few seconds, as the original does.
 
-Where the browser cannot play VP9 WebM, or a video fails, the card draws the animation live.
 The frog animations are [Flare](https://github.com/2d-inc/Flare-JS) files. The card plays them
 with Flare-JS 1.0.0 and CanvasKit, patched to read the newer Flare format that these files use and
 to draw without WebGL. Layer effects (blur, shadows, masks) are read but not drawn, so a few soft

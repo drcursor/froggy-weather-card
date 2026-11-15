@@ -4,10 +4,11 @@
 //
 // Artwork from github.com/R0rt1z2/Froggy, originally Google's; see the README. Rendered with a
 // patched Flare-JS and CanvasKit. Every file sits next to this one (HACS serves them from
-// /hacsfiles/froggy-weather-card/). By default each scene plays as a pre-rendered video, cut
+// /hacsfiles/froggy-weather-card/). The frog is drawn live with WebGL. Where the browser has no
+// WebGL (or the renderer does not start), the scene plays as a pre-rendered video instead, cut
 // portrait, landscape or square to match the card's shape, which is smooth even on slow smart
-// displays. Where video cannot play, the frog is drawn live (in software without WebGL); where
-// that cannot run either (no WebAssembly) the card shows a still of the frog and a short note why.
+// displays. Where video cannot play either, the frog is drawn live in software; where even that
+// cannot run (no WebAssembly) the card shows a still of the frog and a short note why.
 //
 // type: custom:froggy-weather-card
 // entity: weather.x          (default: the first weather entity)
@@ -26,7 +27,8 @@
 // height: 30vh               (any CSS height; overrides aspect_ratio and full_height)
 // border_radius: 0           (corner radius in px; default the theme's card radius)
 // focus_y: 0.5               (which height of the square scene stays in view when cropped, 0 top to 1 bottom)
-// video: true               (play the pre-rendered videos; false draws the frog live)
+// video: auto | always | never  (pre-rendered videos: auto plays them only where WebGL is missing
+//                             or fails; always plays them first; never draws live only; default auto)
 // software_max_side: 800     (without WebGL: canvas size cap in px; lower is smoother)
 // software_fps: 30           (without WebGL: frame rate cap)
 
@@ -109,6 +111,20 @@ function dayPart(sun, now = Date.now()) {
 }
 
 let runtime = null;
+let webgl = null;
+
+// Whether the browser can draw with WebGL; without it the live drawing is software only.
+function hasWebGL() {
+  if (webgl === null) {
+    try {
+      const canvas = document.createElement("canvas");
+      webgl = !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
+    } catch (err) {
+      webgl = false;
+    }
+  }
+  return webgl;
+}
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -146,9 +162,12 @@ class FroggyCard extends HTMLElement {
       status_ok_prefix: "All good",
       software_max_side: SOFTWARE_MAX_SIDE,
       software_fps: SOFTWARE_FPS,
-      video: true,
+      video: "auto",
       ...config,
     };
+    // true and false as in the first 1.1.0 build.
+    if (this._config.video === true) this._config.video = "always";
+    if (this._config.video === false) this._config.video = "never";
     if (this._config.scene !== "random" && !SCENES.includes(this._config.scene)) {
       throw new Error(`scene must be one of ${SCENES.join(", ")} or random`);
     }
@@ -379,7 +398,7 @@ class FroggyCard extends HTMLElement {
     this._tick = setInterval(() => this._update(), 60 * 1000);
     this._clock = setInterval(() => this._renderClock(), 5000);
     this._subscribe();
-    if (this._config.video && this._videoMode !== false) this._startVideo();
+    if (this._config.video === "always" || (this._config.video === "auto" && !hasWebGL())) this._startVideo();
     else this._start();
   }
 
@@ -415,7 +434,14 @@ class FroggyCard extends HTMLElement {
       this._fit();
       if (this._name) this._show(this._name);
     } catch (err) {
-      this._fail(err.message);
+      if (this._config.video !== "never" && this._videoMode === undefined) {
+        console.warn("froggy-card: the live drawing did not start, playing the video instead:", err.message);
+        this._failed = true;
+        this._failReason = err.message;
+        this._startVideo();
+      } else {
+        this._fail(err.message);
+      }
     } finally {
       this._starting = false;
     }
@@ -529,14 +555,16 @@ class FroggyCard extends HTMLElement {
     this._showVideo();
   }
 
+  // Video failed: draw the frog live, or, when that has already failed, keep the still.
   _noVideo(reason) {
-    if (reason) console.warn("froggy-card: video failed, drawing the frog instead:", reason);
+    if (reason) console.warn("froggy-card: video failed:", reason);
     this._videoMode = false;
     clearTimeout(this._replay);
     this._video.classList.remove("live");
     this._video.removeAttribute("src");
     this._video.load();
-    this._start();
+    if (this._failReason) this._fail(this._failReason);
+    else this._start();
   }
 
   // The cut that covers the card's shape: portrait, landscape, or the whole square scene.
@@ -719,7 +747,7 @@ class FroggyCard extends HTMLElement {
           name: "",
           title: "Playback",
           schema: [
-            { name: "video", selector: { boolean: {} } },
+            { name: "video", selector: select(["auto", "always", "never"]) },
             { name: "software_max_side", selector: { number: { min: 320, max: 1600, step: 40, mode: "box" } } },
             { name: "software_fps", selector: { number: { min: 10, max: 60, mode: "box" } } },
           ],
@@ -741,7 +769,7 @@ class FroggyCard extends HTMLElement {
           aspect_ratio: "Aspect ratio (width / height)",
           focus_y: "Vertical focus when cropped",
           border_radius: "Corner radius (px)",
-          video: "Play pre-rendered videos (smoothest)",
+          video: "Pre-rendered videos (auto: where WebGL is missing)",
           software_max_side: "Without WebGL: largest canvas side (px)",
           software_fps: "Without WebGL: frame rate cap",
         })[field.name],
