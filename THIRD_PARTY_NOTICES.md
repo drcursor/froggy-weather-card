@@ -6,6 +6,7 @@ also contain the following work by others.
 | Component | Files in `dist/` | Source | License |
 |---|---|---|---|
 | Weather frog artwork | `*_bg.webp`, `*_frog.flr` | [R0rt1z2/Froggy](https://github.com/R0rt1z2/Froggy) at commit `87376cc` | Copyright Google LLC, see below |
+| Scene videos | `*_portrait.webm`, `*_landscape.webm`, `*_square.webm` | Rendered from the backgrounds and frog animations above by `build/render_videos.py` | Copyright Google LLC, see below |
 | Frog stills | `*_frog.webp` | Rendered from the frog animations above by `build/render_stills.py` | Copyright Google LLC, see below |
 | Flare-JS 1.0.0, patched | `Flare.min.js` | [2d-inc/Flare-JS](https://github.com/2d-inc/Flare-JS) | MIT, `vendor/flare-js/LICENSE` |
 | gl-matrix 2.8.1 | bundled in `Flare.min.js` | [toji/gl-matrix](https://github.com/toji/gl-matrix) | MIT, `vendor/gl-matrix/LICENSE` |

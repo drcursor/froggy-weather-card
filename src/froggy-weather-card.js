@@ -4,8 +4,10 @@
 //
 // Artwork from github.com/R0rt1z2/Froggy, originally Google's; see the README. Rendered with a
 // patched Flare-JS and CanvasKit. Every file sits next to this one (HACS serves them from
-// /hacsfiles/froggy-weather-card/). Without WebGL the frog is drawn in software; where it
-// cannot run at all (no WebAssembly) the card shows a still of the frog and a short note why.
+// /hacsfiles/froggy-weather-card/). By default each scene plays as a pre-rendered video, cut
+// portrait, landscape or square to match the card's shape, which is smooth even on slow smart
+// displays. Where video cannot play, the frog is drawn live (in software without WebGL); where
+// that cannot run either (no WebAssembly) the card shows a still of the frog and a short note why.
 //
 // type: custom:froggy-weather-card
 // entity: weather.x          (default: the first weather entity)
@@ -24,15 +26,22 @@
 // height: 30vh               (any CSS height; overrides aspect_ratio and full_height)
 // border_radius: 0           (corner radius in px; default the theme's card radius)
 // focus_y: 0.5               (which height of the square scene stays in view when cropped, 0 top to 1 bottom)
+// video: true               (play the pre-rendered videos; false draws the frog live)
 // software_max_side: 800     (without WebGL: canvas size cap in px; lower is smoother)
 // software_fps: 30           (without WebGL: frame rate cap)
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 const BASE = new URL(".", import.meta.url).href;
 // The card's own ?v=, passed on so a new version also reloads the runtime scripts.
 const VERSION = new URL(import.meta.url).search;
 const SCENES = ["fields", "hill", "mushroom"];
 const ANIMATION = "Hero-Action";
+
+// The video cuts and the card shapes they cover without losing any of the square scene:
+// portrait 1200x1920 (width / height 0.625 and narrower), landscape 1920x1200 (1.6 and wider),
+// and the whole scene, 1080x1080, in between.
+const VIDEO_PORTRAIT = 0.63;
+const VIDEO_LANDSCAPE = 1.59;
 
 // Software drawing costs CPU per pixel: cap its canvas size and frame rate (both settable).
 const SOFTWARE_MAX_SIDE = 800;
@@ -137,6 +146,7 @@ class FroggyCard extends HTMLElement {
       status_ok_prefix: "All good",
       software_max_side: SOFTWARE_MAX_SIDE,
       software_fps: SOFTWARE_FPS,
+      video: true,
       ...config,
     };
     if (this._config.scene !== "random" && !SCENES.includes(this._config.scene)) {
@@ -287,6 +297,8 @@ class FroggyCard extends HTMLElement {
                transition: background-image 0.6s; }
         canvas { position: absolute; inset: 0; width: 100%; height: 100%; visibility: hidden; }
         canvas.live { visibility: visible; }
+        video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
+        video.live { visibility: visible; }
         .note { position: absolute; top: 8px; left: 8px; right: 8px; color: rgba(255,255,255,0.75);
                 font: 12px var(--ha-font-family-body, sans-serif); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
         .weather { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 20px 16px;
@@ -319,7 +331,7 @@ class FroggyCard extends HTMLElement {
         .slot img { width: min(10cqh, 7.6cqw); height: min(10cqh, 7.6cqw); margin: max(-2cqh, -1.5cqw) 0;
                     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4)); }
       </style>
-      <ha-card><div class="box"><canvas></canvas><div class="note" hidden></div>
+      <ha-card><div class="box"><canvas></canvas><video muted playsinline disablepictureinpicture preload="auto"></video><div class="note" hidden></div>
         <div class="weather"><div class="temp"></div><div class="cond"></div></div>
         <div class="nest" hidden>
           <div class="nest-row"><div class="clock"><div class="date"></div><div class="time"></div></div>
@@ -328,6 +340,7 @@ class FroggyCard extends HTMLElement {
       </div></ha-card>`;
     this._box = this._root.querySelector(".box");
     this._canvas = this._root.querySelector("canvas");
+    this._video = this._root.querySelector("video");
     this._weather = this._root.querySelector(".weather");
     this._nest = this._root.querySelector(".nest");
     this._shape();
@@ -339,6 +352,7 @@ class FroggyCard extends HTMLElement {
     this._box.style.height = height || (full ? this._fullHeight() : "");
     this._box.style.minHeight = height ? "0" : "";
     this._box.style.backgroundPosition = `center ${this._focus() * 100}%`;
+    this._video.style.objectPosition = `center ${this._focus() * 100}%`;
     const radius = this._config.border_radius;
     if (radius == null) this.style.removeProperty("--froggy-radius");
     else this.style.setProperty("--froggy-radius", `${Number(radius) || 0}px`);
@@ -346,23 +360,27 @@ class FroggyCard extends HTMLElement {
 
   connectedCallback() {
     this._visible = true;
-    this._resize = new ResizeObserver(() => this._fit());
+    this._resize = new ResizeObserver(() => {
+      this._fit();
+      if (this._videoMode) this._showVideo();
+    });
     this._resize.observe(this._box);
     this._onWindow = () => this._config.full_height && !this._config.height && this._shape();
     window.addEventListener("resize", this._onWindow);
     requestAnimationFrame(() => this._onWindow());
     this._seen = new IntersectionObserver((entries) => {
       this._visible = entries.some((e) => e.isIntersecting);
-      if (this._visible) this._loop();
+      this._resume();
     });
     this._seen.observe(this._box);
-    this._onVisibility = () => !document.hidden && this._loop();
+    this._onVisibility = () => this._resume();
     document.addEventListener("visibilitychange", this._onVisibility);
     // Time of day moves on without any state change, so check the scene every minute.
     this._tick = setInterval(() => this._update(), 60 * 1000);
     this._clock = setInterval(() => this._renderClock(), 5000);
     this._subscribe();
-    this._start();
+    if (this._config.video && this._videoMode !== false) this._startVideo();
+    else this._start();
   }
 
   disconnectedCallback() {
@@ -376,6 +394,7 @@ class FroggyCard extends HTMLElement {
     clearTimeout(this._replay);
     cancelAnimationFrame(this._frame);
     this._frame = null;
+    this._video.pause();
   }
 
   async _start() {
@@ -471,7 +490,82 @@ class FroggyCard extends HTMLElement {
     if (scene === "random") scene = SCENES[Math.floor(Math.random() * SCENES.length)];
     this._name = `${scene}_${part}_${condition}`;
     this._still(this._name, true);
-    if (this._graphics) this._show(this._name);
+    if (this._videoMode) this._showVideo();
+    else if (this._graphics) this._show(this._name);
+  }
+
+  // Back on screen: carry on with the video or the live drawing; off screen: pause the video.
+  _resume() {
+    if (!this._videoMode) {
+      if (this._visible && !document.hidden) this._loop();
+      return;
+    }
+    const v = this._video;
+    if (!this._visible || document.hidden || !this.isConnected) v.pause();
+    else if (v.classList.contains("live") && !v.ended && !this._waiting) this._play();
+  }
+
+  // Video playback: the scene's video for the card's shape plays once, holds its last frame like
+  // the animation, and plays again after 2.5 to 10 seconds. Any failure falls back to drawing.
+  _startVideo() {
+    if (this._videoMode !== undefined) return;
+    const v = this._video;
+    if (!v.canPlayType('video/webm; codecs="vp9"')) return this._noVideo();
+    this._videoMode = true;
+    v.addEventListener("loadeddata", () => {
+      v.classList.add("live");
+      this._play();
+    });
+    v.addEventListener("ended", () => {
+      this._waiting = true;
+      clearTimeout(this._replay);
+      this._replay = setTimeout(() => {
+        this._waiting = false;
+        v.currentTime = 0;
+        this._resume();
+      }, 2500 + Math.random() * 7500);
+    });
+    v.addEventListener("error", () => this._noVideo(`code ${v.error?.code}`));
+    this._showVideo();
+  }
+
+  _noVideo(reason) {
+    if (reason) console.warn("froggy-card: video failed, drawing the frog instead:", reason);
+    this._videoMode = false;
+    clearTimeout(this._replay);
+    this._video.classList.remove("live");
+    this._video.removeAttribute("src");
+    this._video.load();
+    this._start();
+  }
+
+  // The cut that covers the card's shape: portrait, landscape, or the whole square scene.
+  _cut() {
+    const r = this._box.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const ratio = r.width / r.height;
+    if (ratio <= VIDEO_PORTRAIT) return "portrait";
+    if (ratio >= VIDEO_LANDSCAPE) return "landscape";
+    return "square";
+  }
+
+  _showVideo() {
+    const cut = this._cut();
+    if (!this._name || !cut) return;
+    const src = `${BASE}${this._name}_${cut}.webm${VERSION}`;
+    if (src === this._videoSrc) return;
+    this._videoSrc = src;
+    clearTimeout(this._replay);
+    this._waiting = false;
+    this._video.classList.remove("live");
+    this._video.src = src;
+    this._video.load();
+  }
+
+  _play() {
+    if (!this._visible || document.hidden || !this.isConnected) return;
+    // Autoplay of a muted video is allowed; a refusal leaves the still, which is fine.
+    this._video.play().catch(() => {});
   }
 
   _show(name) {
@@ -623,8 +717,9 @@ class FroggyCard extends HTMLElement {
         {
           type: "expandable",
           name: "",
-          title: "Without WebGL",
+          title: "Playback",
           schema: [
+            { name: "video", selector: { boolean: {} } },
             { name: "software_max_side", selector: { number: { min: 320, max: 1600, step: 40, mode: "box" } } },
             { name: "software_fps", selector: { number: { min: 10, max: 60, mode: "box" } } },
           ],
@@ -646,8 +741,9 @@ class FroggyCard extends HTMLElement {
           aspect_ratio: "Aspect ratio (width / height)",
           focus_y: "Vertical focus when cropped",
           border_radius: "Corner radius (px)",
-          software_max_side: "Largest canvas side (px)",
-          software_fps: "Frame rate cap",
+          video: "Play pre-rendered videos (smoothest)",
+          software_max_side: "Without WebGL: largest canvas side (px)",
+          software_fps: "Without WebGL: frame rate cap",
         })[field.name],
     };
   }

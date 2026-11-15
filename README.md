@@ -24,10 +24,13 @@ put it on a wall tablet, an old smart display or any Home Assistant dashboard an
   sunset, night) and five kinds of weather (sunny, cloudy, hazy, rainy, snowy), chosen from your
   weather entity and the sun.
 - The frog plays its animation, rests for a few seconds and plays again, as on the original.
+- Smooth on slow hardware: each scene plays as a pre-rendered video at 30 frames per second, cut
+  portrait, landscape or square to match the card's shape, so even an old smart display plays it
+  without stutter.
 - Optional Nest Hub style overlay: date, large clock, now and the next days with colour weather
   icons. It can also show an optional status line from any sensor; it is off unless you set one.
 - Everything is served by Home Assistant itself; the card makes no requests to other sites.
-- Works on wall tablets and smart displays without WebGL: the frog is then drawn in software, and
+- Where video cannot play, the frog is drawn live (in software on devices without WebGL), and
   where even that is impossible the card shows a still of the frog.
 - Visual editor in the dashboard.
 
@@ -47,7 +50,8 @@ The button opens this repository in HACS (the Marketplace) on your own Home Assi
 3. Find **Froggy Weather Card** and download it.
 4. Reload the browser.
 
-HACS registers the dashboard resource for you.
+HACS registers the dashboard resource for you. The download is about 120 MB, mostly the scene
+videos (60 scenes, each cut three ways).
 
 ### Manual
 
@@ -83,8 +87,9 @@ entity: weather.home
 | `height` | none | Any CSS height, such as `30vh`. Overrides `aspect_ratio` and `full_height`. |
 | `focus_y` | `0.5` | When the square scene is cropped, which height stays in view, from `0` (top) to `1` (bottom). |
 | `border_radius` | theme | Corner radius in pixels. |
-| `software_max_side` | `800` | Without WebGL: largest canvas side in pixels. Lower is smoother on slow devices. |
-| `software_fps` | `30` | Without WebGL: frame rate cap. |
+| `video` | `true` | Play the pre-rendered scene videos. `false` draws the frog live instead. |
+| `software_max_side` | `800` | Live drawing without WebGL: largest canvas side in pixels. Lower is smoother on slow devices. |
+| `software_fps` | `30` | Live drawing without WebGL: frame rate cap. |
 
 The clock and the forecast days always use Home Assistant's time zone, so a display whose browser
 runs on UTC still shows the right time.
@@ -132,8 +137,9 @@ border_radius: 0
 
 [LANovo](https://github.com/ygelfand/LANovo) replaces Google Assistant on Lenovo Smart Displays (and
 the JBL Link View and Lenovo ThinkSmart View) and can show a Home Assistant dashboard, which gives
-these displays their frog back. Its built-in browser has no WebGL, so the card draws the frog in
-software there, and it shows Home Assistant's time even though that browser runs on UTC.
+these displays their frog back. The card plays its scene videos there (the 1200x1920 portrait cut
+fits the Lenovo Smart Display 10 exactly), and it shows Home Assistant's time even though that
+browser runs on UTC.
 
 1. Make a dashboard with the card, for example the full-screen panel above, or a kitchen layout
    with the frog across the top:
@@ -179,7 +185,6 @@ software there, and it shows Home Assistant's time even though that browser runs
 Tips:
 
 - LANovo hides Home Assistant's header, so `full_height: true` fills the whole screen.
-- If the frog stutters, lower `software_max_side` (for example to `640`) or `software_fps`.
 - For a dark dashboard at night, set the display's **Theme** to a dark one (the
   `select.<display>_screen_theme` entity can do it from an automation, for example an hour after
   sunset) and set the Home Assistant user's dark mode to **Auto**: LANovo then switches the
@@ -187,6 +192,19 @@ Tips:
 
 ## How it works
 
+Each scene is a video: the background with the frog's animation, rendered from the original
+animation at 1920x1920 and 30 frames per second, and cut three ways (VP9 WebM):
+
+| Cut | Size | Used when the card's width divided by its height is |
+|---|---|---|
+| `_portrait` | 1200x1920 | 0.63 or less (a portrait screen) |
+| `_landscape` | 1920x1200 | 1.59 or more (a landscape screen, a wide strip) |
+| `_square` | 1080x1080 | in between |
+
+Each cut covers everything a card of that shape shows, so nothing is lost to cropping. The video
+plays once, holds its last frame, and plays again after a few seconds, as the original does.
+
+Where the browser cannot play VP9 WebM, or a video fails, the card draws the animation live.
 The frog animations are [Flare](https://github.com/2d-inc/Flare-JS) files. The card plays them
 with Flare-JS 1.0.0 and CanvasKit, patched to read the newer Flare format that these files use and
 to draw without WebGL. Layer effects (blur, shadows, masks) are read but not drawn, so a few soft
@@ -201,8 +219,9 @@ build/build.sh
 ```
 
 The script downloads Flare-JS 1.0.0 from npm, applies the patch, bundles it, and fetches the
-artwork from the Froggy repository at a fixed commit. The frog stills in `vendor/stills/` are
-rendered from the animations by `build/render_stills.py` (Playwright and Chrome).
+artwork from the Froggy repository at a fixed commit. The scene videos in `vendor/videos/` are
+rendered from that artwork by `build/render_videos.py` (Playwright with Chrome, and ffmpeg), and
+the frog stills in `vendor/stills/` by `build/render_stills.py`.
 
 To release, raise `CARD_VERSION` in `src/froggy-weather-card.js`, run the build, commit, and
 publish a GitHub release tagged with the same version (for example `v1.0.1`). A workflow attaches

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/: the card, the patched Flare-JS runtime, CanvasKit, the weather frog artwork, the
-# frog stills and the Meteocons icons, all in one flat folder (HACS serves a card's files flat).
+# scene videos, the frog stills and the Meteocons icons, all in one flat folder (HACS serves a
+# card's files flat).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -35,8 +36,9 @@ for scene in fields hill mushroom; do
   done
 done
 
-# Frog stills (rendered by build/render_stills.py) and the Meteocons icons.
-cp vendor/stills/*_frog.webp vendor/meteocons/*.svg dist/
+# Scene videos (rendered by build/render_videos.py), frog stills (build/render_stills.py) and the
+# Meteocons icons.
+cp vendor/videos/*.webm vendor/stills/*_frog.webp vendor/meteocons/*.svg dist/
 cp src/froggy-weather-card.js dist/
 
 echo "dist: $(ls dist | wc -l | tr -d ' ') files, $(du -sh dist | cut -f1)"
